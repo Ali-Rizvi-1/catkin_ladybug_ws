@@ -1,0 +1,7 @@
+<launch>
+    <node name="ladybug_node" pkg="ladybug_driver" type="ladybug_node" output="screen">
+        <param name="scale" value="100" />
+        <param name="framerate" value="10" />
+        <param name="jpeg_percent" value="80" />
+    </node>
+</launch>
