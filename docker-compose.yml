@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  ladybug:
+    build: .
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /dev:/dev
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${HOME}/.Xauthority:/home/ladybug_user/.Xauthority:rw
+      - ./src:/home/ladybug_user/catkin_ws/src
+      - ./docker/sdk:/ladybug_sdk
+
+# Previous:
+# version: '3'
+# services:
+#   ladybug:
+#     build: .
+#     privileged: true  # Needed for USB and FireWire access
+#     network_mode: "host"
+#     environment:
+#       - DISPLAY=${DISPLAY}
+#     volumes:
+#       - /dev:/dev  # For camera access
+#       - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI applications
+#       - ${HOME}/.Xauthority:/home/ladybug_user/.Xauthority:rw
+#       - ./data:/home/ladybug_user/data  # For saving captured data
+#     devices:
+#       - /dev/bus/usb:/dev/bus/usb
+#       - /dev/raw1394:/dev/raw1394
