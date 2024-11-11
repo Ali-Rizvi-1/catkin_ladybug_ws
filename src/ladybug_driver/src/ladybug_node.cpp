@@ -297,6 +297,13 @@ LadybugError start_camera() {
         return error;
     }
 
+    // Configure trigger
+    error = configureTrigger();
+    if (error != LADYBUG_OK) {
+        ROS_ERROR("Failed to configure trigger: %s", ladybugErrorToString(error));
+        return error;
+    }
+
     // Set the framerate of the camera
     ROS_INFO("CONFIG: setting framerate of %d (auto = %d)",(int)m_frameRate,(int)m_isFrameRateAuto);
     error = ladybugSetAbsPropertyEx(m_context, LADYBUG_FRAME_RATE, false, true, m_isFrameRateAuto, m_frameRate);
@@ -357,6 +364,49 @@ LadybugError stop_camera() {
     return cameraError;
 }
 
+
+// In main(), add these parameter reads after your existing params:
+bool trigger_enabled;
+float trigger_delay;
+bool trigger_polarity;
+int trigger_timeout;
+
+private_nh.param<bool>("trigger_enabled", trigger_enabled, true);
+private_nh.param<float>("trigger_delay", trigger_delay, 0.0f);
+private_nh.param<bool>("trigger_polarity", trigger_polarity, true);
+private_nh.param<int>("trigger_timeout", trigger_timeout, 5000);
+
+// Pass these values to your configureTrigger function
+// You'll need to modify the configureTrigger function to accept these parameters:
+LadybugError configureTrigger(bool enabled, float delay, bool polarity, int timeout) {
+    LadybugError error;
+    
+    // Enable GPIO trigger mode
+    error = ladybugSetTriggerMode(m_context, enabled);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+    
+    // Configure trigger polarity (rising/falling edge)
+    error = ladybugSetTriggerPolarity(m_context, polarity);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+    
+    // Set trigger delay (in milliseconds)
+    error = ladybugSetTriggerDelay(m_context, delay);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+    
+    // Enable trigger timeout
+    error = ladybugSetTimeoutDuration(m_context, timeout);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+    
+    return LADYBUG_OK;
+}
 
 /**
  * Get the next image
@@ -454,11 +504,20 @@ int main (int argc, char **argv)
     long int count = 0;
     while (running_ && ros::ok()) {
 
-        // Aquire a new image from the device
+        // // Aquire a new image from the device
+        // LadybugImage currentImage;
+        // const LadybugError acquisitionError = acquire_image(currentImage);
+        // if (acquisitionError != LADYBUG_OK) {
+        //     ROS_WARN("Failed to acquire image. Error (%s). Trying to continue..", ladybugErrorToString(acquisitionError) );
+        //     continue;
+        // }
+
+        // Wait for trigger and acquire image
         LadybugImage currentImage;
-        const LadybugError acquisitionError = acquire_image(currentImage);
+        const LadybugError acquisitionError = ladybugLockNextEvent(m_context, &currentImage);
         if (acquisitionError != LADYBUG_OK) {
-            ROS_WARN("Failed to acquire image. Error (%s). Trying to continue..", ladybugErrorToString(acquisitionError) );
+            ROS_WARN("Failed to acquire triggered image. Error (%s). Trying to continue..", 
+                    ladybugErrorToString(acquisitionError));
             continue;
         }
 
