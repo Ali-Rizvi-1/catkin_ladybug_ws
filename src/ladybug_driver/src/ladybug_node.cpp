@@ -19,6 +19,9 @@
 #include "opencv2/highgui/highgui.hpp"
 #include <opencv2/imgproc/imgproc.hpp>
 
+// Panoramic headers
+#include <ladybuggeom.h>
+#include <ladybugrenderer.h>
 
 using namespace std;
 
@@ -37,9 +40,16 @@ static float g_trigger_delay = 0.0f;
 static bool g_trigger_polarity = true;
 static int g_trigger_timeout = 5000;
 
+// global variables - Panoramic
+#define PANORAMIC_IMAGE_WIDTH    2048
+#define PANORAMIC_IMAGE_HEIGHT   1024
+#define COLOR_PROCESSING_METHOD  LADYBUG_DOWNSAMPLE4
+
+
 
 ros::Publisher pub[LADYBUG_NUM_CAMERAS + 1];
 
+ros::Publisher pub_panoramic;
 
 /**
  * Callback function when the user requests for shutdown
@@ -293,6 +303,69 @@ LadybugError init_camera() {
 
 
 /**
+ * Initialize panoramic stitching
+ */
+LadybugError init_panoramic(LadybugContext context) {
+    LadybugError error;
+
+    // Load config file
+    error = ladybugLoadConfig(context, NULL);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Set the panoramic view angle
+    error = ladybugSetPanoramicViewingAngle(context, LADYBUG_FRONT_0_POLE_5);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Enable alpha masking
+    error = ladybugSetAlphaMasking(context, true);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Set color processing method
+    error = ladybugSetColorProcessingMethod(context, COLOR_PROCESSING_METHOD);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Configure output images
+    error = ladybugConfigureOutputImages(context, LADYBUG_PANORAMIC);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Set off-screen image size
+    error = ladybugSetOffScreenImageSize(
+        context,
+        LADYBUG_PANORAMIC,
+        PANORAMIC_IMAGE_WIDTH,
+        PANORAMIC_IMAGE_HEIGHT);
+    if (error != LADYBUG_OK) {
+        return error;
+    }
+
+    // Initialize alpha masks
+    unsigned int uiRawCols = 0;
+    unsigned int uiRawRows = 0;
+    
+    if (COLOR_PROCESSING_METHOD == LADYBUG_DOWNSAMPLE4) {
+        uiRawCols = 2448 / 2; // Adjust these values based on your camera
+        uiRawRows = 2048 / 2;
+    } else {
+        uiRawCols = 2448; // Adjust these values based on your camera
+        uiRawRows = 2048;
+    }
+
+    error = ladybugInitializeAlphaMasks(context, uiRawCols, uiRawRows);
+    return error;
+}
+
+
+/**
  * This will configure the camera with our parameters, and start the actual stream
  * We will set the framerate, and JPEG quality here...
  */
@@ -359,6 +432,48 @@ LadybugError start_camera() {
     return error;
 }
 
+/**
+ * Process and publish panoramic image
+ */
+void process_panoramic(LadybugContext context, const LadybugImage& image, const ros::Time& timestamp) {
+    LadybugError error;
+
+    // Convert the image to 6 RGB buffers
+    error = ladybugConvertImage(context, &image, NULL);
+    if (error != LADYBUG_OK) {
+        ROS_WARN("Failed to convert image for panoramic stitching");
+        return;
+    }
+
+    // Send the RGB buffers to the graphics card
+    error = ladybugUpdateTextures(context, LADYBUG_NUM_CAMERAS, NULL);
+    if (error != LADYBUG_OK) {
+        ROS_WARN("Failed to update textures for panoramic stitching");
+        return;
+    }
+
+    // Stitch the images and retrieve the output
+    LadybugProcessedImage processedImage;
+    error = ladybugRenderOffScreenImage(context, LADYBUG_PANORAMIC, LADYBUG_BGR, &processedImage);
+    if (error != LADYBUG_OK) {
+        ROS_WARN("Failed to render panoramic image");
+        return;
+    }
+
+    // Create ROS message
+    sensor_msgs::Image msg;
+    msg.header.stamp = timestamp;
+    msg.header.frame_id = "ladybug_panoramic";
+    msg.height = processedImage.uiRows;
+    msg.width = processedImage.uiCols;
+    msg.encoding = "bgr8";
+    msg.step = processedImage.uiCols * 3;
+    msg.data.resize(msg.step * msg.height);
+    memcpy(msg.data.data(), processedImage.pData, msg.step * msg.height);
+
+    // Publish
+    pub_panoramic.publish(msg);
+}
 
 
 /**
@@ -453,6 +568,13 @@ int main (int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    // Initialize panoramic stitching
+    const LadybugError error = init_panoramic(m_context);
+    if (error != LADYBUG_OK) {
+        ROS_ERROR("Failed to initialize panoramic stitching: %s", ladybugErrorToString(error));
+        return EXIT_FAILURE;
+    }
+
     // Read in how much we should scale each image by
     int image_scale = 100;
     if (private_nh.getParam("scale", image_scale) && image_scale>0 && image_scale<=100) {
@@ -506,6 +628,8 @@ int main (int argc, char **argv)
         pub[i] = n.advertise<sensor_msgs::Image>(topic, 100);
         ROS_INFO("Publishing.. %s", topic.c_str());
     }
+    // Create publisher for panoramic image
+    pub_panoramic = n.advertise<sensor_msgs::Image>("/ladybug/panoramic/image_raw", 100);
 
 
     // Start camera polling loop
@@ -553,6 +677,9 @@ int main (int argc, char **argv)
             publishImage(timestamp, image, pub[i], count, i);
 
         }
+
+        // Process and publish panoramic image
+        process_panoramic(m_context, currentImage, timestamp);
 
         // Unlock the image buffer for this image
         unlock_image(currentImage.uiBufferIndex);

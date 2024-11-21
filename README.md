@@ -18,7 +18,7 @@ catkin_ladybug_ws/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/catkin_ladybug_ws.git
+git clone https://github.com/Ali-Rizvi-1/catkin_ladybug_ws.git
 cd catkin_ladybug_ws
 ```
 
