@@ -121,17 +121,53 @@ The driver publishes images to:
 - `/ladybug/camera5/image_raw`
 
 ### Launch Parameters
-
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `scale` | 100 | Image scale percentage |
-| `jpeg_percent` | 80 | JPEG quality |
-| `framerate` | 10 | Camera framerate |
-| `use_auto_framerate` | false | Enable auto framerate |
-| `shutter_time` | 0.5 | Shutter time (seconds) |
-| `use_auto_shutter_time` | true | Enable auto shutter |
-| `gain_amount` | 10 | Gain amount |
-| `use_auto_gain` | true | Enable auto gain |
+| scale | 100 | Image scale percentage |
+| jpeg_percent | 80 | JPEG quality |
+| framerate | 10 | Camera framerate |
+| use_auto_framerate | false | Enable auto framerate |
+| shutter_time | 0.5 | Shutter time (seconds) |
+| use_auto_shutter_time | true | Enable auto shutter |
+| gain_amount | 10 | Gain amount |
+| use_auto_gain | true | Enable auto gain |
+| trigger_enabled | false | Enable external trigger mode |
+| trigger_delay | 0.0 | Trigger delay in milliseconds |
+| trigger_polarity | true | Trigger polarity (true=rising edge, false=falling edge) |
+| trigger_timeout | 5000 | Timeout for triggered capture (milliseconds) |
+
+### External Triggering
+The Ladybug5 camera supports external triggering through its GPIO interface. To use the trigger functionality:
+
+1. Enable trigger mode in the launch file:
+```xml
+<param name="trigger_enabled" value="true" />
+```
+
+2. Configure trigger parameters:
+- `trigger_polarity`: Set to `true` for rising edge, `false` for falling edge
+- `trigger_delay`: Add delay between trigger signal and capture (milliseconds)
+- `trigger_timeout`: Maximum time to wait for trigger signal
+
+3. Connect your trigger source to the camera's GPIO pins
+   - Use GPIO 0 for trigger input
+   - Ensure correct voltage levels (compatible with 3.3V/5V TTL)
+
+Example launch file with triggering enabled:
+```xml
+<launch>
+    <node name="ladybug_node" pkg="ladybug_driver" type="ladybug_node" output="screen">
+        <param name="scale" value="100" />
+        <param name="framerate" value="10" />
+        <param name="jpeg_percent" value="80" />
+        <!-- Trigger configuration -->
+        <param name="trigger_enabled" value="true" />
+        <param name="trigger_delay" value="0.0" />
+        <param name="trigger_polarity" value="true" />
+        <param name="trigger_timeout" value="5000" />
+    </node>
+</launch>
+```
 
 ## Troubleshooting
 
