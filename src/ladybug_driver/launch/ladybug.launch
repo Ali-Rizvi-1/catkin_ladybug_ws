@@ -1,4 +1,8 @@
 <launch>
+    <!-- Static transform for ladybug panoramic camera -->
+    <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="ladybug_static_transform" 
+        args="-0.2 0 0 0 0 0 map ladybug_panoramic" /> -->
+
     <node name="ladybug_node" pkg="ladybug_driver" type="ladybug_node" output="screen">
         <!-- Existing parameters -->
         <param name="scale" value="100" />
@@ -10,5 +14,6 @@
         <param name="trigger_delay" value="0.0" />          <!-- Trigger delay in milliseconds -->
         <param name="trigger_polarity" value="true" />      <!-- true for rising edge, false for falling edge -->
         <param name="trigger_timeout" value="5000" />       <!-- Timeout in milliseconds -->
+        <param name="publish_individual_cameras" value="false" /> <!-- Set to true to publish individual cameras -->
     </node>
 </launch>

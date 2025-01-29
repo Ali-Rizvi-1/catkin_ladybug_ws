@@ -40,6 +40,9 @@ static float g_trigger_delay = 0.0f;
 static bool g_trigger_polarity = true;
 static int g_trigger_timeout = 5000;
 
+// At the top with other globals
+static bool g_publish_individual_cameras = false;
+
 // global variables - Panoramic
 #define PANORAMIC_IMAGE_WIDTH    2048
 #define PANORAMIC_IMAGE_HEIGHT   1024
@@ -47,9 +50,11 @@ static int g_trigger_timeout = 5000;
 
 
 
-ros::Publisher pub[LADYBUG_NUM_CAMERAS + 1];
+// ros::Publisher pub[LADYBUG_NUM_CAMERAS + 1];
 
 ros::Publisher pub_panoramic;
+
+ros::Publisher pub_panoramic_info;
 
 /**
  * Callback function when the user requests for shutdown
@@ -460,7 +465,21 @@ void process_panoramic(LadybugContext context, const LadybugImage& image, const 
         return;
     }
 
-    // Create ROS message
+    // // Create ROS message
+    // sensor_msgs::Image msg;
+    // msg.header.stamp = timestamp;
+    // msg.header.frame_id = "ladybug_panoramic";
+    // msg.height = processedImage.uiRows;
+    // msg.width = processedImage.uiCols;
+    // msg.encoding = "bgr8";
+    // msg.step = processedImage.uiCols * 3;
+    // msg.data.resize(msg.step * msg.height);
+    // memcpy(msg.data.data(), processedImage.pData, msg.step * msg.height);
+
+    // // Publish
+    // pub_panoramic.publish(msg);
+
+    // Create and publish image message (as before)
     sensor_msgs::Image msg;
     msg.header.stamp = timestamp;
     msg.header.frame_id = "ladybug_panoramic";
@@ -471,8 +490,33 @@ void process_panoramic(LadybugContext context, const LadybugImage& image, const 
     msg.data.resize(msg.step * msg.height);
     memcpy(msg.data.data(), processedImage.pData, msg.step * msg.height);
 
-    // Publish
+    // Create and publish camera info message
+    sensor_msgs::CameraInfo camera_info_msg;
+    camera_info_msg.header = msg.header;  // Same header as image
+    camera_info_msg.height = msg.height;
+    camera_info_msg.width = msg.width;
+    
+    // Set basic pinhole camera model for panoramic view
+    camera_info_msg.distortion_model = "plumb_bob";
+    
+    // Fill in calibration matrices
+    // For panoramic view, we'll use basic values
+    camera_info_msg.K[0] = msg.width/2.0; // fx
+    camera_info_msg.K[2] = msg.width/2.0; // cx
+    camera_info_msg.K[4] = msg.height/2.0; // fy
+    camera_info_msg.K[5] = msg.height/2.0; // cy
+    camera_info_msg.K[8] = 1.0;
+    
+    // Copy K matrix to P matrix
+    camera_info_msg.P[0] = camera_info_msg.K[0];
+    camera_info_msg.P[2] = camera_info_msg.K[2];
+    camera_info_msg.P[5] = camera_info_msg.K[4];
+    camera_info_msg.P[6] = camera_info_msg.K[5];
+    camera_info_msg.P[10] = 1.0;
+
+    // Publish both messages
     pub_panoramic.publish(msg);
+    pub_panoramic_info.publish(camera_info_msg);
 }
 
 
@@ -593,6 +637,7 @@ int main (int argc, char **argv)
     private_nh.param<bool>("use_auto_shutter_time", m_isShutterAuto, m_isShutterAuto);
     private_nh.param<float>("gain_amount", m_gainAmount, m_gainAmount);
     private_nh.param<bool>("use_auto_gain", m_isGainAuto, m_isGainAuto);
+    private_nh.param<bool>("publish_individual_cameras", g_publish_individual_cameras, false);
 
     // In your main() function, add this after other parameter reads:
     readTriggerParams(private_nh);
@@ -623,14 +668,24 @@ int main (int argc, char **argv)
 
     // Create the publishers
     ROS_INFO("Successfully started ladybug camera and stream");
-    for (int i = 0; i < LADYBUG_NUM_CAMERAS; i++) {
-        std::string topic = "/ladybug/camera" + std::to_string(i) + "/image_raw";
-        pub[i] = n.advertise<sensor_msgs::Image>(topic, 100);
-        ROS_INFO("Publishing.. %s", topic.c_str());
+    // for (int i = 0; i < LADYBUG_NUM_CAMERAS; i++) {
+    //     std::string topic = "/ladybug/camera" + std::to_string(i) + "/image_raw";
+    //     pub[i] = n.advertise<sensor_msgs::Image>(topic, 100);
+    //     ROS_INFO("Publishing.. %s", topic.c_str());
+    // }
+    // Modify the publisher creation:
+    std::vector<ros::Publisher> individual_pubs;
+    if (g_publish_individual_cameras) {
+        for (int i = 0; i < LADYBUG_NUM_CAMERAS; i++) {
+            std::string topic = "/ladybug/camera" + std::to_string(i) + "/image_raw";
+            individual_pubs.push_back(n.advertise<sensor_msgs::Image>(topic, 100));
+            ROS_INFO("Publishing.. %s", topic.c_str());
+        }
     }
     // Create publisher for panoramic image
     pub_panoramic = n.advertise<sensor_msgs::Image>("/ladybug/panoramic/image_raw", 100);
 
+    pub_panoramic_info = n.advertise<sensor_msgs::CameraInfo>("/ladybug/panoramic/camera_info", 100);
 
     // Start camera polling loop
     ros::Rate loop_rate(m_frameRate);
@@ -654,28 +709,31 @@ int main (int argc, char **argv)
         // Current timestamp of this image
         ros::Time timestamp = ros::Time::now();
 
-        // For each of the cameras, publish to ROS
-        for(size_t i=0; i<LADYBUG_NUM_CAMERAS; i++) {
+        if (g_publish_individual_cameras) {
+            // For each of the cameras, publish to ROS
+            for(size_t i=0; i<LADYBUG_NUM_CAMERAS; i++) {
 
-            // Debug print outs
-            //ROS_INFO("image time %.5f",currentImage.timeStamp.ulSeconds+1e-6*currentImage.timeStamp.ulMicroSeconds);
+                // Debug print outs
+                //ROS_INFO("image time %.5f",currentImage.timeStamp.ulSeconds+1e-6*currentImage.timeStamp.ulMicroSeconds);
 
-            // Get the raw image, and convert it into the standard RGB image type
-            cv::Mat rawImage(size, CV_8UC1, currentImage.pData + (i * size.width*size.height));
-            cv::Mat image(size, CV_8UC3);
-            cv::cvtColor(rawImage, image, cv::COLOR_BayerBG2RGB);
+                // Get the raw image, and convert it into the standard RGB image type
+                cv::Mat rawImage(size, CV_8UC1, currentImage.pData + (i * size.width*size.height));
+                cv::Mat image(size, CV_8UC3);
+                cv::cvtColor(rawImage, image, cv::COLOR_BayerBG2RGB);
 
-            // Resize the image based on the specified amount
-            cv::resize(image,image,cv::Size(size.width*image_scale/100, size.height*image_scale/100));
+                // Resize the image based on the specified amount
+                cv::resize(image,image,cv::Size(size.width*image_scale/100, size.height*image_scale/100));
 
-            // By default the image is side-ways, so correct for this
-            cv::transpose(image, image);
-            cv::flip(image, image, 1);
+                // By default the image is side-ways, so correct for this
+                cv::transpose(image, image);
+                cv::flip(image, image, 1);
 
-            // Publish the current image!
-            // TODO: also publish the camera info here too!
-            publishImage(timestamp, image, pub[i], count, i);
+                // Publish the current image!
+                // TODO: also publish the camera info here too!
+                // publishImage(timestamp, image, pub[i], count, i);
+                publishImage(timestamp, image, individual_pubs[i], count, i);
 
+            }
         }
 
         // Process and publish panoramic image
