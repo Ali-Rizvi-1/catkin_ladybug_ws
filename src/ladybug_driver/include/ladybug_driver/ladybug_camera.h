@@ -21,6 +21,9 @@ public:
     bool initialize();
     void run();
 
+    // Other members
+    static volatile int running_;
+
 private:
     // Camera initialization
     LadybugError initCamera();
@@ -57,9 +60,6 @@ private:
     // ROS node handles
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
-
-    // Other members
-    static volatile int running_;
 };
 
 } // namespace LadybugCamera

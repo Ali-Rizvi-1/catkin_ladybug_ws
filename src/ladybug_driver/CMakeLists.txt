@@ -23,6 +23,7 @@ catkin_package(
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/ladybug_driver
   /usr/include/ladybug
   include
   ${catkin_INCLUDE_DIRS}
