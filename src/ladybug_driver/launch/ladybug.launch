@@ -4,16 +4,22 @@
         args="-0.2 0 0 0 0 0 map ladybug_panoramic" /> -->
 
     <node name="ladybug_node" pkg="ladybug_driver" type="ladybug_node" output="screen">
-        <!-- Existing parameters -->
+        <!-- Image scaling (0-100) -->
         <param name="scale" value="100" />
+
+        <!-- Framerate (Hz) -->
         <param name="framerate" value="10" />
+
+        <!-- JPEG quality (0-100) -->
         <param name="jpeg_percent" value="80" />
-        
+
         <!-- Trigger parameters -->
-        <param name="trigger_enabled" value="false" />        <!-- Set to true to enable trigger mode -->
-        <param name="trigger_delay" value="0.0" />          <!-- Trigger delay in milliseconds -->
-        <param name="trigger_polarity" value="true" />      <!-- true for rising edge, false for falling edge -->
-        <param name="trigger_timeout" value="5000" />       <!-- Timeout in milliseconds -->
-        <param name="publish_individual_cameras" value="false" /> <!-- Set to true to publish individual cameras -->
+        <param name="trigger_enabled" value="false" />        <!-- Enable/disable trigger mode -->
+        <param name="trigger_delay" value="0.0" />            <!-- Trigger delay in milliseconds -->
+        <param name="trigger_polarity" value="true" />        <!-- true: rising edge, false: falling edge -->
+        <param name="trigger_timeout" value="5000" />         <!-- Timeout in milliseconds -->
+
+        <!-- Publish individual camera images -->
+        <param name="publish_individual_cameras" value="false" />
     </node>
 </launch>
